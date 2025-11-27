@@ -1,6 +1,7 @@
 // src/main.rs
 
 mod http;
+mod router;
 
 use http::request::Request;
 use http::response::Response;
@@ -12,19 +13,13 @@ use std::thread;
 fn handle_client(mut stream: TcpStream) {
     let response = match Request::parse(&mut stream) {
         Some(req) => {
-            println!("Received: {:?} {}", req.method, req.path);
-
-            // Logic Placeholder: "If path is /test, say OK"
-            if req.path == "/test" {
-                Response::new(StatusCode::Ok, Some("You found the test page!".to_string()))
-            } else {
-                Response::new(StatusCode::NotFound, Some("Page not found".to_string()))
-            }
+            // Delegate the task to router
+            router::route(req)
         }
-        None => Response::new(StatusCode::BadRequest, None),
+        None => Response::new(StatusCode::BadRequest, Some("400 Bad Request".to_string())),
     };
 
-    // The response object handles the low-level writing
+    // Send response
     if let Err(e) = response.send(&mut stream) {
         println!("Failed to send response: {}", e);
     }
