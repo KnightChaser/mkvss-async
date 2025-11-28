@@ -1,10 +1,11 @@
 // src/http/request.rs
 
 use super::method::Method;
+
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Read};
-use std::net::TcpStream;
 use std::str::FromStr;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+use tokio::net::TcpStream;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -16,12 +17,12 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn parse(stream: &mut TcpStream) -> Option<Self> {
+    pub async fn parse(stream: &mut TcpStream) -> Option<Self> {
         // Read request line
         let mut reader = BufReader::new(stream);
         let mut request_line = String::new();
 
-        if reader.read_line(&mut request_line).is_err() || request_line.is_empty() {
+        if reader.read_line(&mut request_line).await.is_err() || request_line.is_empty() {
             return None;
         }
 
@@ -37,7 +38,7 @@ impl Request {
         let mut headers = HashMap::new();
         loop {
             let mut line = String::new();
-            reader.read_line(&mut line).ok()?;
+            reader.read_line(&mut line).await.ok()?;
 
             if line == "\r\n" || line.is_empty() {
                 break;
@@ -55,7 +56,7 @@ impl Request {
             if let Ok(length) = content_length.parse::<usize>() {
                 if length > 0 {
                     let mut buffer = vec![0; length];
-                    reader.read_exact(&mut buffer).ok()?;
+                    reader.read_exact(&mut buffer).await.ok()?;
                     body = Some(String::from_utf8_lossy(&buffer).to_string());
                 }
             }
