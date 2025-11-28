@@ -4,6 +4,8 @@ use super::method::Method;
 
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::Arc;
+
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::net::TcpStream;
 
@@ -11,9 +13,9 @@ use tokio::net::TcpStream;
 #[derive(Debug)]
 pub struct Request {
     pub method: Method,
-    pub path: String,
+    pub path: Arc<str>,
     pub headers: HashMap<String, String>,
-    pub body: Option<String>,
+    pub body: Option<Arc<str>>,
 }
 
 impl Request {
@@ -32,7 +34,10 @@ impl Request {
         }
 
         let method = Method::from_str(parts[0]).ok()?;
-        let path = parts[1].to_string();
+
+        // NOTE:
+        // Convert String to Arc<str> to avoid unnecessary allocations at further stages
+        let path = Arc::from(parts[1]);
 
         // Read headers into HashMap
         let mut headers = HashMap::new();
@@ -57,7 +62,10 @@ impl Request {
                 if length > 0 {
                     let mut buffer = vec![0; length];
                     reader.read_exact(&mut buffer).await.ok()?;
-                    body = Some(String::from_utf8_lossy(&buffer).to_string());
+
+                    // Convert String -> Arc<str>
+                    let body_string = String::from_utf8_lossy(&buffer).into_owned();
+                    body = Some(Arc::from(body_string));
                 }
             }
         }

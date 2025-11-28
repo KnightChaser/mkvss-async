@@ -10,6 +10,8 @@ use serde::Deserialize;
 use serde_json;
 use sqlx::error::ErrorKind;
 
+use std::sync::Arc;
+
 #[derive(Deserialize)]
 struct CreateKeyRequest {
     key: String,
@@ -79,7 +81,7 @@ async fn get_key(id: &str, pool: &DbPool) -> Response {
     }
 }
 
-async fn create_key(body: Option<String>, pool: &DbPool) -> Response {
+async fn create_key(body: Option<Arc<str>>, pool: &DbPool) -> Response {
     let body_text = match body {
         Some(text) => text,
         None => {
@@ -126,12 +128,14 @@ async fn create_key(body: Option<String>, pool: &DbPool) -> Response {
     }
 }
 
-async fn update_key(id: &str, body: Option<String>, pool: &DbPool) -> Response {
-    let value = body.unwrap_or_default();
+async fn update_key(id: &str, body: Option<Arc<str>>, pool: &DbPool) -> Response {
+    // Dereference the body(Option<Arc<str>>) to Option<&str>,
+    // defaulting to an empty string if None
+    let value = body.as_deref().unwrap_or("");
 
-    let result = sqlx::query("UPDATE kv_store SET value = ? WHERE key = ?")
-        .bind(&value)
+    let result = sqlx::query("INSERT OR REPLACE INTO kv_store (key, value) VALUES (?, ?)")
         .bind(id)
+        .bind(value)
         .execute(pool)
         .await;
 
