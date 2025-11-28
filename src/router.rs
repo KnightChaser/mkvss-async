@@ -155,7 +155,13 @@ async fn delete_key(id: &str, pool: &DbPool) -> Response {
         .await;
 
     match result {
-        Ok(_) => Response::new(StatusCode::Ok, Some(format!("Key '{}' deleted", id))),
+        Ok(r) => {
+            if r.rows_affected() > 0 {
+                Response::new(StatusCode::Ok, Some(format!("Key '{}' deleted", id)))
+            } else {
+                Response::new(StatusCode::NotFound, Some("Key not found".to_string()))
+            }
+        }
         Err(e) => Response::new(
             StatusCode::InternalServerError,
             Some(format!("Failed to delete key: {}", e)),
