@@ -1,42 +1,37 @@
 // src/db.rs
 
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
+use std::str::FromStr;
+use std::time::Duration;
 
-pub type DbPool = Pool<SqliteConnectionManager>;
+pub type DbPool = SqlitePool;
 
-pub fn init_pool(db_name: &str) -> DbPool {
-    // Create the SQLite connection manager
-    let manager = SqliteConnectionManager::file(db_name).with_init(|c| {
-        // Enable WAL mode (Readers don't block writers)
-        c.execute_batch("PRAGMA journal_mode = WAL;")?;
+pub async fn init_pool(db_url: &str) -> DbPool {
+    // Create the database if it's missing, enable WAL mode, and set a busy timeout
+    let connection_options = SqliteConnectOptions::from_str(db_url)
+        .expect("Invalid connection string")
+        .create_if_missing(true)
+        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+        .busy_timeout(Duration::from_secs(5));
 
-        // Set busy timeout to 5000 ms
-        c.execute_batch("PRAGMA busy_timeout=5000;")?;
-        Ok(())
-    });
+    // Create the pool (asynchronous)
+    let pool = SqlitePoolOptions::new()
+        .max_connections(20)
+        .connect_with(connection_options)
+        .await
+        .expect("Failed to create database pool");
 
-    let pool = Pool::builder()
-        .max_size(10)
-        .build(manager)
-        .expect("Failed to create DB pool");
-
-    let conn = pool.get().expect("Failed to get connection for init");
-
-    // Create the key-value table if it doesn't exist
-    conn.execute(
+    sqlx::query(
         "CREATE TABLE IF NOT EXISTS kv_store (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
-        )",
-        [],
+        );",
     )
+    .execute(&pool)
+    .await
     .expect("Failed to create kv_store table");
 
-    // Set synchronous to NORMAL for better performance
-    conn.execute("PRAGMA synchronous = NORMAL;", []).ok();
-
-    println!("Database initialized and table ensured at {}", db_name);
+    println!("Database initialized and connected.");
 
     pool
 }
